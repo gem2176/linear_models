@@ -1,0 +1,92 @@
+---
+title: "cross validation"
+author: "Giuliana Motta"
+date: "2026-11-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Cross validation
+Randomly split you data into training and testing 
+- The training data you use to build your model
+- Testing is date you use to evaluate out of dampl fit
+- Exact ratio depends on data sixe, but I like 80/20
+- Evaluate using the root mean squared error (compute it only in the testing data set)
+- What a higher RMSE
+
+Repeat the partition a couple of times 
+You can fold (5-fold is where the data is split into 5 parts. One is training and the other 4 are test)
+
+Comes up a lot in modern methods
+- variable selection (lasso)
+- most of the time you don't really get p-values, you focus on prediction accuracy instead 
+- its because the goals are usually different for these types of analysis. 
+
+
+# Coding
+
+
+### load in packages 
+```{r}
+library(tidyverse)
+library(modelr)
+library(mgcv)
+library(p8105.datasets)
+```
+
+
+
+## Lidar data
+```{r}
+data("lidar")
+
+lidar_df =
+  lidar |> 
+  mutate(id = row_number()) |> 
+  select(id, everything()) #this reoders things to put id in the front
+
+lidar_df |> 
+  ggplot(aes(x= range, y = logratio)) +
+  geom_point()
+
+```
+Build training and testing datasets - sample at random your training data set 
+
+```{r}
+train_df = sample_frac(lidar_df, size = .8)
+test_df = anti_join(lidar_df, train_df, by = "id") #of everything in one thing, what is not in the other
+```
+
+```{r}
+ggplot(train_df, aes(x = range, y = logratio)) + 
+  geom_point() + 
+  geom_point(data = test_df, color = "red") #you can see where the testing data set in red 
+```
+
+
+Fit some models 
+```{r}
+linear_mod = lm(logratio ~ range, data = train_df)
+smooth_mod = mgcv::gam(logratio ~ s(range), data = train_df) #gam stands for generalized additive models, s stands for a smooth fit, but gam does still assume constant variance - Jeff hates cubic polynomials lol 
+wiggly_mod = mgcv::gam(logratio ~ s(range, k = 30), sp = 10e-6, data = train_df) #this happens when you add a number of breaks 
+```
+
+make a plot
+```{r}
+train_df |> 
+  add_predictions(wiggly_mod) |> 
+  ggplot(aes(x = range, y = logratio)) + 
+  geom_point() + 
+  geom_line(aes(y = pred), color = "red")
+
+```
+do model comparisons 
+```{r}
+rmse(linear_mod, test_df)
+rmse(smooth_mod, test_df)
+rmse(wiggly_mod, test_df)
+```
+
